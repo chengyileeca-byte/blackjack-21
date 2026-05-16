@@ -1,0 +1,2379 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Velvet 21 — Blackjack</title>
+<style>
+  :root {
+    --felt-1: #0a3d2e;
+    --felt-2: #082a20;
+    --felt-3: #134d3b;
+    --gold:   #d4af37;
+    --gold-2: #f4e3a1;
+    --cream:  #f5ecd6;
+    --ink:    #1a1a1a;
+    --red:    #c0322b;
+    --shadow: 0 10px 30px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    font-family: "Inter", "Helvetica Neue", "Noto Sans TC", system-ui, sans-serif;
+    color: var(--cream);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse at 50% 30%, var(--felt-3) 0%, var(--felt-1) 45%, var(--felt-2) 100%);
+    background-attachment: fixed;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,.025) 1px, transparent 0);
+    background-size: 4px 4px;
+    pointer-events: none;
+  }
+
+  .table {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .table::after {
+    content: "";
+    position: absolute;
+    inset: 28px;
+    border: 2px solid rgba(212,175,55,.35);
+    border-radius: 200px / 120px;
+    pointer-events: none;
+    box-shadow: inset 0 0 80px rgba(0,0,0,.5);
+  }
+
+  header.top {
+    z-index: 2;
+    padding: 18px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brand {
+    font-family: "Playfair Display", "Noto Serif TC", Georgia, serif;
+    font-style: italic;
+    font-size: 24px;
+    letter-spacing: 2px;
+    color: var(--gold-2);
+    text-shadow: 0 1px 0 rgba(0,0,0,.4);
+  }
+  .brand span {
+    color: var(--gold);
+    font-weight: 700;
+    font-style: normal;
+    margin-right: 4px;
+  }
+
+  .stats {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .stat {
+    background: rgba(0,0,0,.35);
+    border: 1px solid rgba(212,175,55,.25);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--gold-2);
+  }
+  .stat b { color: var(--cream); font-weight: 600; margin-left: 6px; }
+
+  .felt {
+    position: relative;
+    display: grid;
+    grid-template-rows: 1fr auto 1fr;
+    align-items: center;
+    z-index: 1;
+  }
+
+  .row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .label {
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(245,236,214,.55);
+  }
+
+  .hand {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    min-height: 150px;
+    position: relative;
+    gap: 10px;
+  }
+
+  .player-area {
+    display: flex;
+    gap: 28px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .player-hand-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 6px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    transition: background .25s, border-color .25s, opacity .25s, box-shadow .25s;
+  }
+  .player-hand-group.active {
+    background: rgba(212,175,55,.07);
+    border-color: rgba(212,175,55,.3);
+    box-shadow: 0 0 24px rgba(212,175,55,.18);
+  }
+  .player-hand-group.surrendered { opacity: .35; }
+  .hand-bet-tag {
+    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+    font-size: 10px;
+    color: rgba(245,236,214,.45);
+    letter-spacing: 2px;
+  }
+  .hand-bet-tag.doubled { color: var(--gold); }
+  .hand-bet-tag.surr::after { content: " · 投降"; color: #ff8a80; }
+
+  .score-pill {
+    background: rgba(0,0,0,.45);
+    border: 1px solid rgba(212,175,55,.35);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    min-width: 64px;
+    text-align: center;
+    color: var(--cream);
+  }
+  .score-pill.bust { color: #ff8a80; border-color: rgba(255,138,128,.5); }
+  .score-pill.bj   { color: var(--gold); border-color: var(--gold); box-shadow: 0 0 18px rgba(212,175,55,.4); }
+
+  .middle { text-align: center; padding: 8px 0; }
+
+  .message {
+    font-family: "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 28px;
+    color: var(--gold-2);
+    min-height: 40px;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 8px rgba(0,0,0,.5);
+    transition: opacity .25s;
+  }
+  .message.win  { color: #b8e6b3; }
+  .message.lose { color: #ff8a80; }
+  .message.push { color: var(--gold-2); }
+
+  /* ============ Card ============ */
+  .card-slot {
+    width: 96px;
+    height: 134px;
+  }
+
+  .card {
+    position: relative;
+    width: 100%; height: 100%;
+    box-shadow: var(--shadow);
+    border-radius: 8px;
+    animation: dealIn .4s cubic-bezier(.2,.85,.3,1.1);
+    background: #fdfaf2;
+  }
+  .card.flipping {
+    animation: flipCard .55s cubic-bezier(.5,0,.5,1);
+  }
+
+  @keyframes dealIn {
+    from { transform: translate(220px, -160px) rotate(20deg) scale(.7); opacity: 0; }
+    to   { transform: translate(0,0) rotate(0) scale(1); opacity: 1; }
+  }
+  @keyframes flipCard {
+    0%   { transform: scaleX(1); }
+    50%  { transform: scaleX(.04); }
+    100% { transform: scaleX(1); }
+  }
+
+  .face, .back {
+    position: absolute; inset: 0;
+    border-radius: 8px;
+  }
+
+  .face {
+    background: #fdfaf2;
+    color: var(--ink);
+    border: 1px solid rgba(0,0,0,.15);
+    padding: 6px 8px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+  }
+
+  .face.red { color: var(--red); }
+
+  .corner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .corner .rank { font-size: 18px; }
+  .corner .suit { font-size: 14px; }
+  .corner.br { justify-self: end; transform: rotate(180deg); }
+
+  .pip {
+    align-self: center;
+    justify-self: center;
+    font-size: 46px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .back {
+    background:
+      repeating-linear-gradient(45deg, #7b1a1a 0 6px, #5a0f0f 6px 12px),
+      #5a0f0f;
+    border: 4px solid #fdfaf2;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .back::after {
+    content: "♛";
+    font-size: 42px;
+    color: var(--gold);
+    text-shadow: 0 0 8px rgba(0,0,0,.6);
+  }
+
+  /* ============ Controls ============ */
+  footer {
+    z-index: 2;
+    padding: 16px 32px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .bet-area {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 22px;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(245,236,214,.65);
+  }
+  #clear-bet { margin-bottom: 18px; }
+
+  .bet-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+  .bet-stack .bet-label {
+    font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: rgba(245,236,214,.4);
+    text-transform: uppercase;
+  }
+  .bet-stack.main .bet-label { color: rgba(245,236,214,.55); }
+  .bet-stack .bet-sub-amount {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  .bet-spot {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    border: 2px dashed rgba(212,175,55,.4);
+    background: radial-gradient(circle, rgba(0,0,0,.4), rgba(0,0,0,0) 70%);
+    box-shadow: inset 0 0 24px rgba(0,0,0,.5);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .bet-spot::before {
+    content: "BET";
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: rgba(212,175,55,.35);
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+  .bet-spot.has-chips::before { opacity: 0; }
+  .bet-spot.active {
+    border-color: var(--gold);
+    border-style: solid;
+    box-shadow: inset 0 0 24px rgba(0,0,0,.5), 0 0 22px rgba(212,175,55,.45);
+  }
+  .bet-spot.small { width: 72px; height: 72px; }
+  .bet-spot.small::before { font-size: 9px; letter-spacing: 2px; }
+  #ll-spot::before { content: "LL"; }
+  #buster-spot::before { content: "BUSTER"; }
+
+  .bet-amount {
+    color: var(--gold);
+    font-family: "Playfair Display", Georgia, serif;
+    font-style: italic;
+    font-size: 22px;
+    letter-spacing: 1px;
+    font-weight: 600;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  .placed-chip {
+    position: absolute;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: 10px;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    box-shadow:
+      0 3px 0 rgba(0,0,0,.4),
+      0 6px 12px rgba(0,0,0,.55),
+      inset 0 0 0 3px rgba(255,255,255,.18);
+    top: 50%; left: 50%;
+    --dx: 0px; --dy: 0px; --rot: 0deg;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot));
+    animation: chipToss .42s cubic-bezier(.2,.85,.3,1.2);
+    pointer-events: none;
+  }
+  .placed-chip::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(255,255,255,.55);
+  }
+  .placed-chip.c-1   { background: radial-gradient(circle at 30% 30%, #ffffff, #d6d6d6); color: #333; text-shadow: none; }
+  .placed-chip.c-5   { background: radial-gradient(circle at 30% 30%, #e85751, #a82822); }
+  .placed-chip.c-25  { background: radial-gradient(circle at 30% 30%, #3aa86b, #1b6b40); }
+  .placed-chip.c-100 { background: radial-gradient(circle at 30% 30%, #2a2a2a, #000); }
+  .placed-chip.c-500 { background: radial-gradient(circle at 30% 30%, #9b59b6, #5e3076); }
+
+  @keyframes chipToss {
+    0% {
+      transform: translate(calc(-50% + var(--dx) + 30px), calc(-50% + var(--dy) + 260px))
+                 rotate(calc(var(--rot) + 540deg)) scale(.7);
+      opacity: 0;
+    }
+    50% { opacity: 1; }
+    100% {
+      transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+                 rotate(var(--rot)) scale(1);
+      opacity: 1;
+    }
+  }
+
+  .placed-chip.sweep-win  { animation: chipSweepWin  .55s forwards; }
+  .placed-chip.sweep-loss { animation: chipSweepLoss .6s forwards; }
+  .placed-chip.sweep-push { animation: chipSweepPush .4s forwards; }
+
+  @keyframes chipSweepWin {
+    to {
+      transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 240px))
+                 rotate(calc(var(--rot) - 180deg)) scale(.55);
+      opacity: 0;
+    }
+  }
+  @keyframes chipSweepLoss {
+    to {
+      transform: translate(calc(-50% + var(--dx) - 40px), calc(-50% + var(--dy) - 380px))
+                 rotate(calc(var(--rot) + 540deg)) scale(.5);
+      opacity: 0;
+    }
+  }
+  @keyframes chipSweepPush {
+    to {
+      transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+                 rotate(var(--rot)) scale(.7);
+      opacity: 0;
+    }
+  }
+
+  .btn.btn-mini {
+    padding: 6px 14px;
+    min-width: 70px;
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  .chip-tray { display: flex; gap: 16px; margin-top: 4px; }
+
+  .chip {
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    transition: transform .15s, box-shadow .15s;
+    box-shadow:
+      0 4px 0 rgba(0,0,0,.35),
+      0 8px 16px rgba(0,0,0,.4),
+      inset 0 0 0 4px rgba(255,255,255,.15);
+  }
+  .chip::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    border: 2px dashed rgba(255,255,255,.5);
+  }
+  .chip:hover { transform: translateY(-3px); }
+  .chip:active { transform: translateY(0); }
+  .chip.c-1   { background: radial-gradient(circle at 30% 30%, #ffffff, #d6d6d6); color: #333; text-shadow: none; }
+  .chip.c-5   { background: radial-gradient(circle at 30% 30%, #e85751, #a82822); }
+  .chip.c-25  { background: radial-gradient(circle at 30% 30%, #3aa86b, #1b6b40); }
+  .chip.c-100 { background: radial-gradient(circle at 30% 30%, #2a2a2a, #000); }
+  .chip.c-500 { background: radial-gradient(circle at 30% 30%, #9b59b6, #5e3076); }
+  .chip.disabled { opacity: .35; pointer-events: none; }
+
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; min-height: 46px; align-items: center; }
+
+  .btn {
+    padding: 12px 26px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+    color: var(--gold-2);
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    min-width: 110px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, var(--gold) 0%, #b08820 100%);
+    color: var(--ink);
+    box-shadow: 0 4px 14px rgba(212,175,55,.4);
+  }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  .btn.primary { background: linear-gradient(180deg, var(--gold) 0%, #b08820 100%); color: var(--ink); }
+  .btn.ghost { background: transparent; color: rgba(245,236,214,.6); border-color: rgba(245,236,214,.25); }
+
+  .insurance-banner {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,.85);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 20px 28px;
+    z-index: 10;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  .insurance-banner h3 { margin: 0 0 6px; color: var(--gold); letter-spacing: 2px; font-size: 16px; }
+  .insurance-banner p { margin: 0 0 14px; font-size: 13px; opacity: .8; }
+  .insurance-banner .btn { margin: 0 6px; min-width: 90px; padding: 8px 16px; }
+
+  .hidden { display: none !important; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,.8);
+    color: var(--cream);
+    padding: 10px 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(212,175,55,.3);
+    font-size: 13px;
+    letter-spacing: 1px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+    z-index: 50;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ===== Win feedback (dopamine pop) ===== */
+  .win-pop {
+    position: fixed;
+    z-index: 100;
+    font-family: "Playfair Display", "Noto Serif TC", Georgia, serif;
+    font-weight: 700;
+    font-style: italic;
+    color: var(--gold);
+    text-shadow:
+      0 0 22px rgba(212,175,55,.95),
+      0 0 44px rgba(212,175,55,.55),
+      0 4px 14px rgba(0,0,0,.7);
+    pointer-events: none;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    animation: winPop 1.55s cubic-bezier(.2,.8,.3,1) forwards;
+  }
+  .win-pop.small  { font-size: 26px; }
+  .win-pop.medium { font-size: 40px; }
+  .win-pop.big    { font-size: 58px; }
+  .win-pop.huge   { font-size: 82px; }
+
+  @keyframes winPop {
+    0%   { transform: translate(-50%, -50%) scale(.35); opacity: 0; }
+    18%  { transform: translate(-50%, -50%) scale(1.22); opacity: 1; }
+    35%  { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+    100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
+  }
+
+  .win-halo {
+    position: fixed;
+    z-index: 99;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(212,175,55,.55) 0%, rgba(212,175,55,0) 70%);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    animation: haloExpand 1.6s ease-out forwards;
+  }
+  @keyframes haloExpand {
+    0%   { transform: translate(-50%, -50%) scale(0);  opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(10); opacity: 0; }
+  }
+
+  #bankroll {
+    display: inline-block;
+    transition: color .25s;
+    transform-origin: center;
+  }
+  #bankroll.flash {
+    animation: bankrollFlash 1s ease;
+  }
+  @keyframes bankrollFlash {
+    0%, 100% { color: var(--cream); text-shadow: none; transform: scale(1); }
+    25%      { color: var(--gold);
+               text-shadow: 0 0 18px rgba(212,175,55,.9), 0 0 36px rgba(212,175,55,.4);
+               transform: scale(1.18); }
+    60%      { color: var(--gold);
+               text-shadow: 0 0 12px rgba(212,175,55,.6);
+               transform: scale(1.05); }
+  }
+
+  /* ============ Monitor Panel ============ */
+  .monitor-toggle {
+    position: fixed;
+    top: 18px; right: 24px;
+    z-index: 25;
+    background: rgba(0,0,0,.7);
+    color: #7fffd4;
+    border: 1px solid rgba(127,255,212,.35);
+    font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, "Noto Sans Mono CJK TC", monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 7px 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .monitor-toggle:hover { background: rgba(127,255,212,.1); }
+  .monitor-toggle .dot {
+    width: 7px; height: 7px;
+    background: #ff3838;
+    border-radius: 50%;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  .monitor-toggle.alert .dot { background: #ffd166; }
+  .monitor-toggle.danger .dot { background: #ff6b6b; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  .monitor {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 380px;
+    max-width: 92vw;
+    background: linear-gradient(180deg, #0a0d10 0%, #060809 100%);
+    border-left: 1px solid rgba(127,255,212,.2);
+    font-family: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, "Noto Sans Mono CJK TC", monospace;
+    font-size: 12px;
+    color: #cfd8d8;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .35s cubic-bezier(.2,.85,.3,1);
+    z-index: 30;
+    box-shadow: -10px 0 50px rgba(0,0,0,.6);
+  }
+  .monitor.open { transform: translateX(0); }
+
+  .monitor .mhead {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(127,255,212,.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,.5);
+  }
+  .monitor h2 {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #7fffd4;
+    font-weight: 500;
+  }
+  .monitor-close {
+    background: none; border: none;
+    color: #cfd8d8;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .monitor-close:hover { color: #ff6b6b; }
+
+  .monitor-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(127,255,212,.2) transparent;
+  }
+  .monitor-body::-webkit-scrollbar { width: 6px; }
+  .monitor-body::-webkit-scrollbar-thumb { background: rgba(127,255,212,.2); }
+
+  .mon-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(127,255,212,.08);
+  }
+  .mon-section h3 {
+    margin: 0 0 10px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #7fffd4;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .mon-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 5px 0;
+    border-bottom: 1px dashed rgba(255,255,255,.05);
+    font-size: 12px;
+  }
+  .mon-row:last-child { border-bottom: none; }
+  .mon-row .key { color: #8a9ba8; }
+  .mon-row .val { color: #cfd8d8; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mon-row .val.bad  { color: #ff6b6b; }
+  .mon-row .val.warn { color: #ffd166; }
+  .mon-row .val.ok   { color: #7fffd4; }
+
+  .bar {
+    position: relative;
+    height: 5px;
+    background: rgba(255,255,255,.06);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: linear-gradient(90deg, #7fffd4 0%, #ffd166 50%, #ff6b6b 100%);
+    transition: width .5s ease;
+  }
+
+  .log {
+    font-size: 11px;
+    line-height: 1.55;
+    max-height: 240px;
+    overflow-y: auto;
+    background: #050708;
+    padding: 8px 10px;
+    border: 1px solid rgba(255,255,255,.04);
+    border-radius: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(127,255,212,.2) transparent;
+  }
+  .log::-webkit-scrollbar { width: 5px; }
+  .log::-webkit-scrollbar-thumb { background: rgba(127,255,212,.2); }
+  .log .entry { display: flex; gap: 6px; padding: 1px 0; }
+  .log .ts  { color: #5a6b78; flex-shrink: 0; }
+  .log .lvl { font-weight: 600; flex-shrink: 0; }
+  .log .lvl.info  { color: #7fffd4; }
+  .log .lvl.warn  { color: #ffd166; }
+  .log .lvl.alert { color: #ff6b6b; }
+  .log .lvl.note  { color: #8a9ba8; }
+  .log .lvl.win   { color: #b8e6b3; }
+  .log .lvl.loss  { color: #ff8a80; }
+  .log .msg { color: #cfd8d8; }
+
+  .reality {
+    font-style: italic;
+    color: #ffd166;
+    border-left: 2px solid #ffd166;
+    padding: 8px 12px;
+    background: rgba(255,209,102,.05);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .reality.bad { color: #ff8a80; border-color: #ff6b6b; background: rgba(255,107,107,.06); }
+
+  .reset-btn {
+    margin-top: 10px;
+    width: 100%;
+    background: transparent;
+    border: 1px solid rgba(255,107,107,.4);
+    color: #ff6b6b;
+    padding: 7px;
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .reset-btn:hover { background: rgba(255,107,107,.1); }
+
+  .session-banner {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.92);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .session-banner .box {
+    max-width: 480px;
+    border: 1px solid rgba(255,107,107,.4);
+    background: #0a0d10;
+    padding: 28px 32px;
+    border-radius: 4px;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    color: #cfd8d8;
+  }
+  .session-banner h2 {
+    margin: 0 0 14px;
+    color: #ff6b6b;
+    letter-spacing: 3px;
+    font-size: 14px;
+  }
+  .session-banner p { font-size: 13px; line-height: 1.7; margin: 8px 0; }
+  .session-banner .actions { margin-top: 20px; gap: 10px; }
+  .session-banner .btn { min-width: 120px; }
+
+  .footer-link {
+    position: absolute;
+    bottom: 8px; left: 16px;
+    font-size: 11px;
+    color: rgba(245,236,214,.3);
+    letter-spacing: 2px;
+  }
+
+  @media (max-width: 720px) {
+    .brand { font-size: 18px; }
+    .stats .stat:nth-child(3) { display: none; }
+    .stat { font-size: 11px; padding: 6px 12px; }
+    .card-slot { width: 72px; height: 100px; }
+    .hand { gap: 6px; }
+    .pip { font-size: 32px; }
+    .corner .rank { font-size: 14px; }
+    .chip { width: 52px; height: 52px; font-size: 12px; }
+    .btn { padding: 10px 18px; min-width: 88px; font-size: 12px; letter-spacing: 2px; }
+    .message { font-size: 20px; }
+    .monitor-toggle { top: auto; bottom: 12px; right: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="table">
+
+  <header class="top">
+    <div class="brand"><span>♠</span>Velvet 21</div>
+    <div class="stats">
+      <div class="stat">籌碼 <b id="bankroll">$1,000</b></div>
+      <div class="stat">本局 <b id="bet">$0</b></div>
+      <div class="stat">勝/負/和 <b id="record">0 / 0 / 0</b></div>
+    </div>
+  </header>
+
+  <main class="felt">
+    <div class="row">
+      <div class="label">DEALER</div>
+      <div class="hand" id="dealer-hand"></div>
+      <div class="score-pill" id="dealer-score">—</div>
+    </div>
+
+    <div class="middle">
+      <div class="message" id="message">下注後按 DEAL 開始</div>
+    </div>
+
+    <div class="row">
+      <div class="player-area" id="player-area"></div>
+      <div class="label">PLAYER</div>
+    </div>
+
+    <div class="insurance-banner hidden" id="insurance">
+      <h3>INSURANCE?</h3>
+      <p>莊家明牌為 A，要買保險嗎？（押注的一半）</p>
+      <button class="btn primary" data-ins="yes">YES</button>
+      <button class="btn" data-ins="no">NO</button>
+    </div>
+  </main>
+
+  <footer>
+    <div class="actions" id="actions">
+      <button class="btn primary" id="deal-btn">DEAL</button>
+      <button class="btn" id="hit-btn">HIT</button>
+      <button class="btn" id="stand-btn">STAND</button>
+      <button class="btn" id="double-btn">DOUBLE</button>
+      <button class="btn" id="split-btn">SPLIT</button>
+      <button class="btn" id="surrender-btn">SURRENDER</button>
+    </div>
+    <div class="bet-area">
+      <div class="bet-stack side">
+        <div class="bet-spot small" id="ll-spot"></div>
+        <div class="bet-label">LUCKY LUCKY</div>
+        <div class="bet-sub-amount" id="ll-amount">$0</div>
+      </div>
+      <div class="bet-stack main">
+        <div class="bet-spot" id="bet-spot"></div>
+        <div class="bet-label">MAIN BET</div>
+        <span class="bet-amount" id="bet-amount">$0</span>
+      </div>
+      <div class="bet-stack side">
+        <div class="bet-spot small" id="buster-spot"></div>
+        <div class="bet-label">BUSTER</div>
+        <div class="bet-sub-amount" id="buster-amount">$0</div>
+      </div>
+      <button class="btn ghost btn-mini" id="clear-bet">CLEAR</button>
+    </div>
+    <div class="chip-tray" id="chip-tray">
+      <div class="chip c-1"   data-value="1">$1</div>
+      <div class="chip c-5"   data-value="5">$5</div>
+      <div class="chip c-25"  data-value="25">$25</div>
+      <div class="chip c-100" data-value="100">$100</div>
+      <div class="chip c-500" data-value="500">$500</div>
+    </div>
+  </footer>
+</div>
+
+<button class="monitor-toggle" id="monitor-toggle">
+  <span class="dot"></span>MONITOR
+</button>
+
+<aside class="monitor" id="monitor">
+  <div class="mhead">
+    <h2>監控台 · GAMBLER WATCH</h2>
+    <button class="monitor-close" id="monitor-close">×</button>
+  </div>
+  <div class="monitor-body">
+
+    <div class="mon-section">
+      <h3>SESSION 本次連線</h3>
+      <div class="mon-row"><span class="key">遊戲時間</span><span class="val" id="m-time">00:00:00</span></div>
+      <div class="mon-row"><span class="key">手牌數</span><span class="val" id="m-hands">0</span></div>
+      <div class="mon-row"><span class="key">本次勝率</span><span class="val" id="m-winrate">—</span></div>
+      <div class="mon-row"><span class="key">當前連敗</span><span class="val" id="m-streak">0</span></div>
+      <div class="mon-row"><span class="key">每小時燒錢</span><span class="val" id="m-burn">$0/hr</span></div>
+      <div class="mon-row"><span class="key">追注次數</span><span class="val" id="m-chase">0</span></div>
+    </div>
+
+    <div class="mon-section">
+      <h3>LIFETIME 累積戰績</h3>
+      <div class="mon-row"><span class="key">投注總額</span><span class="val" id="m-wagered">$0</span></div>
+      <div class="mon-row"><span class="key">淨損益</span><span class="val" id="m-pnl">$0</span></div>
+      <div class="mon-row"><span class="key">莊家賺走</span><span class="val bad" id="m-house">$0</span></div>
+      <div class="mon-row"><span class="key">實際莊家優勢</span><span class="val" id="m-edge">—</span></div>
+      <div class="mon-row"><span class="key">最長連敗</span><span class="val" id="m-maxstreak">0</span></div>
+      <div class="mon-row"><span class="key">最大單局虧損</span><span class="val" id="m-biggest">$0</span></div>
+      <div class="mon-row"><span class="key">重新發錢次數</span><span class="val" id="m-rebuys">0</span></div>
+      <button class="reset-btn" id="reset-lifetime">RESET LIFETIME</button>
+    </div>
+
+    <div class="mon-section">
+      <h3>賭癮指數 / TILT INDEX</h3>
+      <div class="mon-row"><span class="key">分數</span><span class="val" id="m-tilt">0 / 100</span></div>
+      <div class="bar"><div class="bar-fill" id="m-tilt-bar" style="width: 0%"></div></div>
+      <div class="mon-row" style="margin-top:10px"><span class="key">回本機率（粗估）</span><span class="val" id="m-recover">—</span></div>
+    </div>
+
+    <div class="mon-section">
+      <h3>現實對照 / 你輸的錢可以買…</h3>
+      <div id="m-items">
+        <div class="mon-row"><span class="key">—</span><span class="val">—</span></div>
+      </div>
+    </div>
+
+    <div class="mon-section">
+      <h3>SIDE BET 賠率</h3>
+      <div style="font-weight:600;color:#7fffd4;margin:2px 0 4px;font-size:11px">Lucky Lucky · 玩家首兩張 + 莊家明牌（A 可作 1 或 11）</div>
+      <div class="mon-row"><span class="key">同花 7-7-7</span><span class="val ok">200 : 1</span></div>
+      <div class="mon-row"><span class="key">同花 6-7-8</span><span class="val ok">100 : 1</span></div>
+      <div class="mon-row"><span class="key">雜色 7-7-7</span><span class="val">50 : 1</span></div>
+      <div class="mon-row"><span class="key">同花 21</span><span class="val">20 : 1</span></div>
+      <div class="mon-row"><span class="key">雜色 6-7-8</span><span class="val">10 : 1</span></div>
+      <div class="mon-row"><span class="key">總和 21</span><span class="val">3 : 1</span></div>
+      <div class="mon-row"><span class="key">總和 20</span><span class="val">2 : 1</span></div>
+      <div class="mon-row"><span class="key">總和 19</span><span class="val">2 : 1</span></div>
+      <div style="font-weight:600;color:#7fffd4;margin:10px 0 4px;font-size:11px">Buster Blackjack · 莊家爆牌張數</div>
+      <div class="mon-row"><span class="key">3 張爆牌</span><span class="val">2 : 1</span></div>
+      <div class="mon-row"><span class="key">4 張爆牌</span><span class="val">4 : 1</span></div>
+      <div class="mon-row"><span class="key">5 張爆牌</span><span class="val">18 : 1</span></div>
+      <div class="mon-row"><span class="key">6 張爆牌</span><span class="val">50 : 1</span></div>
+      <div class="mon-row"><span class="key">7 張爆牌</span><span class="val ok">250 : 1</span></div>
+      <div class="mon-row"><span class="key">8+ 張爆牌</span><span class="val ok">800 : 1</span></div>
+    </div>
+
+    <div class="mon-section">
+      <h3>REALITY CHECK</h3>
+      <div class="reality" id="m-reality">尚未提供建議。再玩幾把就會了。</div>
+    </div>
+
+    <div class="mon-section">
+      <h3>ACTIVITY LOG</h3>
+      <div class="log" id="m-log"></div>
+    </div>
+
+  </div>
+</aside>
+
+<div class="session-banner hidden" id="bankrupt-banner">
+  <div class="box">
+    <h2>BANKRUPT.</h2>
+    <p>你的籌碼歸零了。</p>
+    <p id="bankrupt-detail" style="color:#8a9ba8"></p>
+    <p>賭場可以給你一筆「友善的」 $1,000 讓你繼續，或者你可以關掉這個分頁去做點別的事。</p>
+    <div class="actions">
+      <button class="btn primary" id="rebuy-yes">再給我 $1,000</button>
+      <button class="btn ghost" id="rebuy-no">關掉</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="footer-link">Velvet 21 · Play Money Only</div>
+
+<script>
+(() => {
+  // ===== Constants =====
+  const SUITS = ["♠", "♥", "♦", "♣"];
+  const RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+
+  const REALITY_LINES = [
+    "76% 的真實賭徒長期是輸的。剩下的還沒結算。",
+    "賭場期望值是負的。永遠是。",
+    "莊家不睡覺，只等你回來。",
+    "玩到第 100 把時，理論上你的本金已經被莊家優勢吃掉 5% 以上。",
+    "Hit 一下要 0.3 秒，輸光積蓄要幾個小時。",
+    "賭場地毯的圖案經過心理學設計，讓你忘記時間。這就是你看不到時鐘的原因。",
+    "贏了你以為是技術。輸了你以為是運氣。其實兩者都不是。",
+    "21 點的「正確策略」全部記下來，你的劣勢也只是降到 0.5%，永遠不會是 0。",
+    "現在的你比一小時前的你窮一些。慢慢地。",
+    "你能離開的最佳時機是—現在。下一把不會更好。",
+    "把這個關掉去散步。不會有人怪你。",
+    "你贏了 $500 然後又輸光了。賭場稱這個現象為『日常』。",
+    "睡眠不足會降低風險判斷力。順帶一提，你看一下時間。",
+    "賭場的霓虹燈在心理學上被稱作 dopamine bait。",
+    "如果這是真錢，現在你的另一半已經發現了。",
+  ];
+
+  // 你輸的錢可以買什麼（NTD 估價）
+  const ITEMS = [
+    { name: "杯珍奶", price: 60 },
+    { name: "份雞排", price: 80 },
+    { name: "個便當", price: 110 },
+    { name: "杯星巴克", price: 165 },
+    { name: "張電影票", price: 350 },
+    { name: "頓燒烤吃到飽", price: 700 },
+    { name: "瓶威士忌（中段）", price: 1500 },
+    { name: "片 Switch 遊戲", price: 1800 },
+    { name: "個月健身房", price: 1500 },
+    { name: "副 AirPods", price: 6000 },
+    { name: "張東京來回機票", price: 9000 },
+    { name: "個月雙北雅房房租", price: 10000 },
+    { name: "台 PS5", price: 14000 },
+    { name: "支 iPhone", price: 35000 },
+    { name: "台 125 機車", price: 85000 },
+  ];
+
+  // ===== State =====
+  const STORAGE_KEY = "velvet21.lifetime.v1";
+
+  const defaultLifetime = () => ({
+    handsTotal: 0, wins: 0, losses: 0, pushes: 0, blackjacks: 0,
+    wagered: 0, pnl: 0,
+    biggestLoss: 0, biggestWin: 0,
+    longestLossStreak: 0, longestWinStreak: 0,
+    rebuys: 0,
+    firstPlayed: Date.now(),
+  });
+
+  const state = {
+    bankroll: 1000,
+    bet: 0,
+    luckyBet: 0,
+    busterBet: 0,
+    deck: [],
+    hands: [],            // array of hand objects (1 normally, 2 after split)
+    activeHandIdx: 0,
+    dealer: [],
+    phase: "betting",
+    record: { w: 0, l: 0, p: 0 },
+    revealed: false,
+    placedChips: [],      // main bet chips
+    placedChipsLL: [],    // lucky lucky chips
+    placedChipsBuster: [],
+    activeSpot: "main",   // 'main' | 'll' | 'buster' — where new chips go
+    // session
+    sessionStart: Date.now(),
+    sessionWagered: 0,
+    sessionPnL: 0,
+    sessionHands: 0,
+    currentStreak: { type: null, n: 0 }, // 'win' | 'loss' | 'push'
+    chaseCount: 0,
+    lastOutcome: null,
+    lastBet: 0,
+    realityShownAt: 0,
+    // per-hand meta
+    handMeta: null,
+    // lifetime (loaded from localStorage)
+    lifetime: loadLifetime(),
+  };
+
+  function loadLifetime() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultLifetime();
+      const parsed = JSON.parse(raw);
+      return Object.assign(defaultLifetime(), parsed);
+    } catch { return defaultLifetime(); }
+  }
+  function saveLifetime() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.lifetime)); } catch {}
+  }
+
+  // ===== DOM =====
+  const $ = (id) => document.getElementById(id);
+  const dealerHandEl = $("dealer-hand");
+  const playerAreaEl = $("player-area");
+  const dealerScoreEl = $("dealer-score");
+  const messageEl = $("message");
+  const bankrollEl = $("bankroll");
+  const betEl = $("bet");
+  const betAmountEl = $("bet-amount");
+  const recordEl = $("record");
+  const insuranceEl = $("insurance");
+  const toastEl = $("toast");
+
+  const dealBtn = $("deal-btn");
+  const hitBtn = $("hit-btn");
+  const standBtn = $("stand-btn");
+  const doubleBtn = $("double-btn");
+  const splitBtn = $("split-btn");
+  const surrenderBtn = $("surrender-btn");
+  const clearBetBtn = $("clear-bet");
+
+  // monitor
+  const monitorEl = $("monitor");
+  const monitorToggle = $("monitor-toggle");
+  const monitorClose = $("monitor-close");
+  const logEl = $("m-log");
+
+  // ===== Helpers =====
+  const fmt = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString();
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmtTime = (ms) => {
+    const s = Math.floor(ms/1000);
+    return `${pad(Math.floor(s/3600))}:${pad(Math.floor(s/60)%60)}:${pad(s%60)}`;
+  };
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove("show"), 1600);
+  }
+
+  function popWin(amount, anchorEl = null, size = "medium") {
+    const el = document.createElement("div");
+    el.className = `win-pop ${size}`;
+    el.textContent = "+" + fmt(amount);
+    let x, y;
+    if (anchorEl && anchorEl.getBoundingClientRect) {
+      const r = anchorEl.getBoundingClientRect();
+      x = r.left + r.width / 2;
+      y = r.top + r.height / 2;
+    } else {
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 2;
+    }
+    x += (Math.random() - 0.5) * 30;
+    el.style.left = x + "px";
+    el.style.top  = y + "px";
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
+
+    if (size === "big" || size === "huge") {
+      const halo = document.createElement("div");
+      halo.className = "win-halo";
+      halo.style.left = x + "px";
+      halo.style.top  = y + "px";
+      document.body.appendChild(halo);
+      setTimeout(() => halo.remove(), 1700);
+    }
+    flashBankroll();
+  }
+
+  function flashBankroll() {
+    bankrollEl.classList.remove("flash");
+    void bankrollEl.offsetWidth;   // force reflow to restart animation
+    bankrollEl.classList.add("flash");
+    setTimeout(() => bankrollEl.classList.remove("flash"), 1100);
+  }
+
+  // Animated bankroll counter — ticks UP on wins; snaps on bets/losses
+  let _bankrollShown = null;
+  function setBankrollDisplay(target) {
+    if (_bankrollShown === null) _bankrollShown = target;
+    if (_bankrollShown === target) {
+      bankrollEl.textContent = fmt(target);
+      return;
+    }
+    if (target < _bankrollShown) {
+      // decrease — snap (placing bet, losing)
+      _bankrollShown = target;
+      bankrollEl.textContent = fmt(target);
+      return;
+    }
+    // increase — tick up
+    const start = _bankrollShown;
+    const startTime = performance.now();
+    const duration = Math.min(1100, 400 + (target - start) * 1.2);
+    function step(now) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const cur = Math.round(start + (target - start) * eased);
+      _bankrollShown = cur;
+      bankrollEl.textContent = fmt(cur);
+      if (t < 1 && _bankrollShown !== state.bankroll) requestAnimationFrame(step);
+      else { _bankrollShown = target; bankrollEl.textContent = fmt(target); }
+    }
+    requestAnimationFrame(step);
+  }
+
+  function getHandEl(idx) {
+    return playerAreaEl.children[idx] || playerAreaEl;
+  }
+
+  function buildShoe(numDecks = 7) {
+    const shoe = [];
+    for (let d = 0; d < numDecks; d++)
+      for (const s of SUITS)
+        for (const r of RANKS) shoe.push({ rank: r, suit: s });
+    for (let i = shoe.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shoe[i], shoe[j]] = [shoe[j], shoe[i]];
+    }
+    return shoe;
+  }
+
+  function draw() {
+    if (state.deck.length <= 312) {
+      state.deck = buildShoe();
+      logEvent("note", "Cut card 切入 — 用掉一副就洗（7 副中只發 52 張）。");
+    }
+    return state.deck.pop();
+  }
+
+  function handValue(cards) {
+    let total = 0, aces = 0;
+    for (const c of cards) {
+      if (c.rank === "A") { total += 11; aces++; }
+      else if (["J","Q","K"].includes(c.rank)) total += 10;
+      else total += parseInt(c.rank, 10);
+    }
+    let reduced = 0;
+    while (total > 21 && aces > 0) { total -= 10; aces--; reduced++; }
+    const hasUnreducedAce = cards.some(c => c.rank === "A") && reduced < cards.filter(c => c.rank === "A").length;
+    return { total, soft: hasUnreducedAce && total <= 21 };
+  }
+
+  function isBlackjack(cards) {
+    return cards.length === 2 && handValue(cards).total === 21;
+  }
+
+  function cardValue(card) {
+    if (card.rank === "A") return 11;
+    if (["J","Q","K"].includes(card.rank)) return 10;
+    return parseInt(card.rank, 10);
+  }
+
+  // ===== Rendering =====
+  function makeFaceEl(card) {
+    const face = document.createElement("div");
+    const isRed = card.suit === "♥" || card.suit === "♦";
+    face.className = "face" + (isRed ? " red" : "");
+    face.innerHTML =
+      `<div class="corner tl"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>` +
+      `<div class="pip">${card.suit}</div>` +
+      `<div class="corner br"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>`;
+    return face;
+  }
+
+  function makeBackEl() {
+    const back = document.createElement("div");
+    back.className = "back";
+    return back;
+  }
+
+  function makeCardEl(card, faceDown = false) {
+    const slot = document.createElement("div");
+    slot.className = "card-slot";
+    const inner = document.createElement("div");
+    inner.className = "card";
+    inner.dataset.faceDown = faceDown ? "1" : "0";
+    inner.append(faceDown ? makeBackEl() : makeFaceEl(card));
+    slot.append(inner);
+    return slot;
+  }
+
+  function syncHand(container, cards, faceDownFn) {
+    while (container.children.length > cards.length) {
+      container.lastChild.remove();
+    }
+    cards.forEach((card, i) => {
+      const faceDown = faceDownFn(card, i);
+      if (i < container.children.length) {
+        const inner = container.children[i].querySelector(".card");
+        const wasFaceDown = inner.dataset.faceDown === "1";
+        if (wasFaceDown !== faceDown) {
+          // Flip animation: shrink to 0 width, swap content, expand back
+          inner.classList.add("flipping");
+          setTimeout(() => {
+            inner.innerHTML = "";
+            inner.append(faceDown ? makeBackEl() : makeFaceEl(card));
+            inner.dataset.faceDown = faceDown ? "1" : "0";
+          }, 270);
+          setTimeout(() => inner.classList.remove("flipping"), 560);
+        }
+      } else {
+        container.append(makeCardEl(card, faceDown));
+      }
+    });
+  }
+
+  function makeHandGroupEl() {
+    const g = document.createElement("div");
+    g.className = "player-hand-group";
+    g.innerHTML =
+      `<div class="score-pill" data-role="score">—</div>` +
+      `<div class="hand" data-role="cards"></div>` +
+      `<div class="hand-bet-tag" data-role="bet"></div>`;
+    return g;
+  }
+
+  function renderHands() {
+    // Dealer
+    syncHand(dealerHandEl, state.dealer,
+      (_, i) => (i === 1) && !state.revealed && state.phase !== "settle");
+    renderDealerScore();
+    // Player hands
+    while (playerAreaEl.children.length > state.hands.length) {
+      playerAreaEl.lastChild.remove();
+    }
+    state.hands.forEach((hand, idx) => {
+      let g = playerAreaEl.children[idx];
+      if (!g) { g = makeHandGroupEl(); playerAreaEl.append(g); }
+      const isActive = idx === state.activeHandIdx && state.phase === "playerTurn";
+      g.classList.toggle("active", isActive);
+      g.classList.toggle("surrendered", hand.surrendered);
+
+      const cardsEl = g.querySelector('[data-role="cards"]');
+      syncHand(cardsEl, hand.cards, () => false);
+
+      const scoreEl = g.querySelector('[data-role="score"]');
+      renderHandScorePill(scoreEl, hand);
+
+      const betEl = g.querySelector('[data-role="bet"]');
+      betEl.textContent = fmt(hand.bet);
+      betEl.classList.toggle("doubled", hand.doubled);
+      betEl.classList.toggle("surr", hand.surrendered);
+    });
+  }
+
+  function renderHandScorePill(el, hand) {
+    if (hand.cards.length === 0) {
+      el.textContent = "—"; el.className = "score-pill"; return;
+    }
+    const v = handValue(hand.cards);
+    el.textContent = (v.soft ? "soft " : "") + v.total;
+    el.className = "score-pill" +
+      (v.total > 21 ? " bust" : "") +
+      (isBlackjack(hand.cards) && !hand.fromSplit ? " bj" : "");
+  }
+
+  function renderDealerScore() {
+    if (state.dealer.length === 0) {
+      dealerScoreEl.textContent = "—"; dealerScoreEl.className = "score-pill"; return;
+    }
+    if (!state.revealed) {
+      const v = handValue([state.dealer[0]]);
+      dealerScoreEl.textContent = v.total;
+      dealerScoreEl.className = "score-pill";
+    } else {
+      const v = handValue(state.dealer);
+      dealerScoreEl.textContent = (v.soft ? "soft " : "") + v.total;
+      dealerScoreEl.className = "score-pill" +
+        (v.total > 21 ? " bust" : "") +
+        (isBlackjack(state.dealer) ? " bj" : "");
+    }
+  }
+
+  function renderInfo() {
+    setBankrollDisplay(state.bankroll);
+    const mainTotal = state.phase === "betting"
+      ? state.bet
+      : state.hands.reduce((s, h) => s + h.bet, 0) + (state.handMeta?.insurance || 0);
+    const topBetTotal = mainTotal + state.luckyBet + state.busterBet;
+    betEl.textContent = fmt(topBetTotal);
+    betAmountEl.textContent = fmt(mainTotal);
+    llAmountEl.textContent = fmt(state.luckyBet);
+    busterAmountEl.textContent = fmt(state.busterBet);
+    recordEl.textContent = `${state.record.w} / ${state.record.l} / ${state.record.p}`;
+  }
+
+  function setMessage(text, kind = "") {
+    messageEl.textContent = text;
+    messageEl.className = "message" + (kind ? " " + kind : "");
+  }
+
+  function setPhase(phase) {
+    state.phase = phase;
+    updateButtons();
+  }
+
+  function show(el, visible) { el.style.display = visible ? "" : "none"; }
+  function showSpace(el, visible) { el.style.visibility = visible ? "" : "hidden"; }
+
+  function updateButtons() {
+    const p = state.phase;
+    const inBet = p === "betting";
+    const isPlay = p === "playerTurn";
+    const hand = isPlay ? state.hands[state.activeHandIdx] : null;
+
+    const canDeal = inBet && state.bet > 0;
+    const hasAnyBet = inBet && (state.bet > 0 || state.luckyBet > 0 || state.busterBet > 0);
+    const canHit  = isPlay && hand && !hand.fromSplitAce;
+    const canStand = isPlay && hand;
+    const canDbl  = isPlay && hand && hand.cards.length === 2 && state.bankroll >= hand.bet && !hand.fromSplitAce;
+    const canSplit = isPlay && hand && hand.cards.length === 2 &&
+                     cardValue(hand.cards[0]) === cardValue(hand.cards[1]) &&
+                     state.bankroll >= hand.bet && state.hands.length < 2;
+    const canSurr = isPlay && hand && hand.cards.length === 2 &&
+                    state.hands.length === 1 && !hand.fromSplitAce;
+
+    show(dealBtn, canDeal);
+    show(hitBtn, canHit);
+    show(standBtn, canStand);
+    show(doubleBtn, canDbl);
+    show(splitBtn, canSplit);
+    show(surrenderBtn, canSurr);
+    showSpace(clearBetBtn, hasAnyBet);  // visibility-only so the bet stacks don't reflow
+
+    document.querySelectorAll(".chip").forEach((el) => {
+      const v = +el.dataset.value;
+      el.classList.toggle("disabled", p !== "betting" || v > state.bankroll);
+    });
+  }
+
+  // ===== Bet visual / chip pile =====
+  const betSpotEl     = document.getElementById("bet-spot");
+  const llSpotEl      = document.getElementById("ll-spot");
+  const busterSpotEl  = document.getElementById("buster-spot");
+  const llAmountEl    = document.getElementById("ll-amount");
+  const busterAmountEl = document.getElementById("buster-amount");
+
+  function spotEl(spot) {
+    return spot === "ll" ? llSpotEl : spot === "buster" ? busterSpotEl : betSpotEl;
+  }
+  function chipsArrFor(spot) {
+    return spot === "ll" ? state.placedChipsLL :
+           spot === "buster" ? state.placedChipsBuster :
+           state.placedChips;
+  }
+  function scatterFor(spot) {
+    return spot === "main" ? 26 : 14;  // smaller spots → tighter scatter
+  }
+
+  function addChipToSpot(value, spot = "main") {
+    const target = spotEl(spot);
+    const arr = chipsArrFor(spot);
+    const chip = document.createElement("div");
+    chip.className = `placed-chip c-${value}`;
+    chip.textContent = "$" + value;
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * scatterFor(spot);
+    const dx = (Math.cos(angle) * r).toFixed(1);
+    const dy = (Math.sin(angle) * r).toFixed(1);
+    const rot = ((Math.random() - 0.5) * 80).toFixed(1);
+    chip.style.setProperty("--dx", dx + "px");
+    chip.style.setProperty("--dy", dy + "px");
+    chip.style.setProperty("--rot", rot + "deg");
+    chip.style.zIndex = String(arr.length);
+    target.appendChild(chip);
+    arr.push({ value, el: chip });
+    target.classList.add("has-chips");
+  }
+
+  function sweepBetChips(kind, spot = "main") {
+    const arr = chipsArrFor(spot);
+    const target = spotEl(spot);
+    const chips = arr.slice();
+    if (spot === "main") state.placedChips = [];
+    else if (spot === "ll") state.placedChipsLL = [];
+    else state.placedChipsBuster = [];
+    chips.forEach((c, i) => {
+      setTimeout(() => {
+        c.el.classList.add("sweep-" + kind);
+        setTimeout(() => c.el.remove(), 650);
+      }, i * 30);
+    });
+    setTimeout(() => target.classList.remove("has-chips"), 100);
+  }
+
+  function setActiveSpot(spot) {
+    if (state.phase !== "betting") return;
+    state.activeSpot = spot;
+    betSpotEl.classList.toggle("active", spot === "main");
+    llSpotEl.classList.toggle("active", spot === "ll");
+    busterSpotEl.classList.toggle("active", spot === "buster");
+  }
+
+  // ===== Monitor =====
+  function logEvent(level, msg) {
+    const ts = new Date();
+    const time = `${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
+    const entry = document.createElement("div");
+    entry.className = "entry";
+    entry.innerHTML =
+      `<span class="ts">${time}</span>` +
+      `<span class="lvl ${level}">[${level.toUpperCase().padEnd(5)}]</span>` +
+      `<span class="msg"></span>`;
+    entry.querySelector(".msg").textContent = msg;
+    logEl.append(entry);
+    logEl.scrollTop = logEl.scrollHeight;
+    while (logEl.children.length > 400) logEl.removeChild(logEl.firstChild);
+  }
+
+  function pickItems(loss) {
+    if (loss <= 0) return [];
+    // pick 3 items where count is most "relatable" (between 1 and 200)
+    const scored = ITEMS.map(it => ({
+      it,
+      n: loss / it.price,
+    })).filter(x => x.n >= 1)
+      .sort((a, b) => {
+        // prefer counts between 3 and 30
+        const score = (x) => {
+          if (x.n < 1) return 1e9;
+          if (x.n > 200) return 1e9;
+          const ideal = 8;
+          return Math.abs(Math.log(x.n) - Math.log(ideal));
+        };
+        return score(a) - score(b);
+      });
+    return scored.slice(0, 3).map(x => ({
+      name: x.it.name,
+      count: Math.floor(x.n),
+    }));
+  }
+
+  function computeTilt() {
+    const lt = state.lifetime;
+    const sessionMin = (Date.now() - state.sessionStart) / 60000;
+    let score = 0;
+    score += Math.min(30, state.sessionHands * 0.5);          // 量
+    score += Math.min(25, sessionMin * 0.7);                  // 時間
+    score += Math.min(20, lt.longestLossStreak * 3);          // 史上最長連敗
+    score += Math.min(15, lt.rebuys * 7);                     // 重新發錢
+    score += Math.min(20, state.chaseCount * 4);              // 追注次數
+    score += clamp(-lt.pnl / 200, 0, 25);                     // 累積虧損
+    return Math.round(clamp(score, 0, 100));
+  }
+
+  function computeRecoveryProbability() {
+    const lt = state.lifetime;
+    if (lt.pnl >= 0) return 100;
+    const loss = -lt.pnl;
+    // very rough heuristic: starts at 50%, decays with hands and loss
+    const p = 50 - 0.25 * lt.handsTotal - 0.6 * (loss / 100);
+    return Math.round(clamp(p, 1, 50));
+  }
+
+  function updateMonitor() {
+    const lt = state.lifetime;
+    // session row
+    $("m-time").textContent = fmtTime(Date.now() - state.sessionStart);
+    $("m-hands").textContent = state.sessionHands;
+
+    const totalDecided = state.record.w + state.record.l;
+    const wr = totalDecided ? (state.record.w / totalDecided * 100) : null;
+    const wrEl = $("m-winrate");
+    if (wr === null) { wrEl.textContent = "—"; wrEl.className = "val"; }
+    else {
+      wrEl.textContent = wr.toFixed(1) + "%";
+      wrEl.className = "val " + (wr < 45 ? "bad" : wr > 52 ? "ok" : "warn");
+    }
+
+    const streakEl = $("m-streak");
+    const stk = state.currentStreak;
+    streakEl.textContent = stk.type === "loss" ? stk.n : 0;
+    streakEl.className = "val " + (stk.type === "loss" && stk.n >= 3 ? "bad" : "");
+
+    const hrs = (Date.now() - state.sessionStart) / 3600000;
+    const burn = hrs > 0.02 ? Math.round(-state.sessionPnL / hrs) : 0;
+    const burnEl = $("m-burn");
+    burnEl.textContent = burn > 0 ? `${fmt(burn)}/hr` : (state.sessionPnL > 0 ? `+${fmt(state.sessionPnL/Math.max(hrs,0.02))}/hr` : "$0/hr");
+    burnEl.className = "val " + (burn > 0 ? "bad" : burn < 0 ? "ok" : "");
+
+    $("m-chase").textContent = state.chaseCount;
+    $("m-chase").className = "val " + (state.chaseCount >= 3 ? "warn" : "");
+
+    // lifetime
+    $("m-wagered").textContent = fmt(lt.wagered);
+    const pnlEl = $("m-pnl");
+    pnlEl.textContent = (lt.pnl >= 0 ? "+" : "") + fmt(lt.pnl);
+    pnlEl.className = "val " + (lt.pnl < 0 ? "bad" : lt.pnl > 0 ? "ok" : "");
+    $("m-house").textContent = fmt(Math.max(0, -lt.pnl));
+    const edge = lt.wagered > 0 ? (-lt.pnl / lt.wagered * 100) : null;
+    const edgeEl = $("m-edge");
+    if (edge === null) edgeEl.textContent = "—";
+    else {
+      edgeEl.textContent = (edge >= 0 ? "" : "+") + edge.toFixed(2) + "%";
+      edgeEl.className = "val " + (edge > 1 ? "bad" : edge < -1 ? "ok" : "warn");
+    }
+    $("m-maxstreak").textContent = lt.longestLossStreak;
+    $("m-biggest").textContent = fmt(lt.biggestLoss);
+    $("m-rebuys").textContent = lt.rebuys;
+
+    // tilt
+    const tilt = computeTilt();
+    $("m-tilt").textContent = `${tilt} / 100`;
+    $("m-tilt").className = "val " + (tilt >= 70 ? "bad" : tilt >= 40 ? "warn" : "");
+    $("m-tilt-bar").style.width = tilt + "%";
+    monitorToggle.classList.remove("alert", "danger");
+    if (tilt >= 70) monitorToggle.classList.add("danger");
+    else if (tilt >= 40) monitorToggle.classList.add("alert");
+
+    const recov = computeRecoveryProbability();
+    const rEl = $("m-recover");
+    rEl.textContent = recov + "%";
+    rEl.className = "val " + (recov < 15 ? "bad" : recov < 35 ? "warn" : "");
+
+    // items
+    const itemsEl = $("m-items");
+    const items = pickItems(Math.max(0, -lt.pnl));
+    if (items.length === 0) {
+      itemsEl.innerHTML = `<div class="mon-row"><span class="key">目前還沒虧到買得起一杯珍奶</span><span class="val">—</span></div>`;
+    } else {
+      itemsEl.innerHTML = items.map(i =>
+        `<div class="mon-row"><span class="key">${i.name}</span><span class="val bad">× ${i.count.toLocaleString()}</span></div>`
+      ).join("");
+    }
+  }
+
+  function setReality(text, bad = false) {
+    const el = $("m-reality");
+    el.textContent = text;
+    el.className = "reality" + (bad ? " bad" : "");
+  }
+
+  function maybeRealityCheck(trigger) {
+    // pick contextual lines
+    const lt = state.lifetime;
+    const lines = [];
+    if (state.currentStreak.type === "loss" && state.currentStreak.n >= 3) {
+      lines.push(`你連輸 ${state.currentStreak.n} 把了。大腦正在分泌『再來一把就會贏』的訊號。那是錯覺。`);
+    }
+    if (state.chaseCount >= 2 && trigger === "bet") {
+      lines.push("輸了之後你下注變大了。這叫追損 (chasing losses)。它是賭博成癮的核心症狀之一。");
+    }
+    if (lt.handsTotal === 50) lines.push("已經 50 手了。莊家優勢在這個量已經開始穩定發揮。");
+    if (lt.handsTotal === 100) lines.push("100 手。理論上你應該已經虧掉 0.5%–2% 的本金。實際數字在上面。");
+    if (lt.rebuys >= 1 && trigger === "rebuy") {
+      lines.push(`已經重新發錢 ${lt.rebuys} 次了。在真實世界這叫去 ATM。`);
+    }
+    if (lt.pnl < -500) lines.push(`累積虧損超過 ${fmt(-lt.pnl)} 了。在現實裡這夠買 ${pickItems(-lt.pnl)[0]?.count || "幾"} ${pickItems(-lt.pnl)[0]?.name || "份東西"}。`);
+    const sessionMin = (Date.now() - state.sessionStart) / 60000;
+    if (sessionMin > 30 && Date.now() - state.realityShownAt > 60000) {
+      lines.push(`你已經連續玩了 ${Math.round(sessionMin)} 分鐘。賭場沒有窗戶不是巧合。`);
+    }
+
+    if (lines.length === 0) {
+      // ambient
+      if (Date.now() - state.realityShownAt < 20000) return;
+      lines.push(REALITY_LINES[Math.floor(Math.random() * REALITY_LINES.length)]);
+    }
+
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    setReality(line, state.currentStreak.type === "loss" && state.currentStreak.n >= 3);
+    state.realityShownAt = Date.now();
+  }
+
+  function recordHandResult(outcome, betAtSettle, netChange) {
+    const lt = state.lifetime;
+    lt.handsTotal++;
+    lt.wagered += betAtSettle;
+    lt.pnl += netChange;
+    state.sessionHands++;
+    state.sessionWagered += betAtSettle;
+    state.sessionPnL += netChange;
+
+    if (outcome === "win" || outcome === "blackjack") {
+      lt.wins++;
+      state.record.w++;
+      if (outcome === "blackjack") lt.blackjacks++;
+      if (netChange > lt.biggestWin) lt.biggestWin = netChange;
+      updateStreak("win");
+    } else if (outcome === "loss" || outcome === "bust") {
+      lt.losses++;
+      state.record.l++;
+      if (-netChange > lt.biggestLoss) lt.biggestLoss = -netChange;
+      updateStreak("loss");
+    } else {
+      lt.pushes++;
+      state.record.p++;
+      updateStreak("push");
+    }
+    saveLifetime();
+
+    // log
+    const niceOutcome = {
+      win: "WIN", blackjack: "BLACKJACK", loss: "LOSS",
+      bust: "BUST", push: "PUSH"
+    }[outcome] || outcome;
+    const logLevel = (outcome === "win" || outcome === "blackjack") ? "win" :
+                     (outcome === "loss" || outcome === "bust") ? "loss" : "note";
+    const sign = netChange >= 0 ? "+" : "";
+    logEvent(logLevel, `${niceOutcome} · 押 ${fmt(betAtSettle)} · ${sign}${fmt(netChange)} · 莊累計賺 ${fmt(Math.max(0, -lt.pnl))}`);
+
+    state.lastOutcome = outcome;
+    state.lastBet = betAtSettle;
+    updateMonitor();
+    maybeRealityCheck("settle");
+  }
+
+  function updateStreak(type) {
+    const s = state.currentStreak;
+    if (s.type === type) s.n++;
+    else { s.type = type; s.n = 1; }
+    const lt = state.lifetime;
+    if (type === "loss" && s.n > lt.longestLossStreak) lt.longestLossStreak = s.n;
+    if (type === "win"  && s.n > lt.longestWinStreak)  lt.longestWinStreak  = s.n;
+  }
+
+  // ===== Game flow =====
+  function makeHand(bet) {
+    return { cards: [], bet, doubled: false, surrendered: false, finished: false, fromSplit: false, fromSplitAce: false };
+  }
+  function activeHand() { return state.hands[state.activeHandIdx]; }
+  function isHandSplittable(hand) {
+    if (!hand || hand.cards.length !== 2) return false;
+    return cardValue(hand.cards[0]) === cardValue(hand.cards[1]);
+  }
+
+  function placeChip(value) {
+    if (state.phase !== "betting") return;
+    if (value > state.bankroll) { toast("籌碼不足"); return; }
+    state.bankroll -= value;
+    if (state.activeSpot === "ll")          state.luckyBet  += value;
+    else if (state.activeSpot === "buster") state.busterBet += value;
+    else                                     state.bet       += value;
+    addChipToSpot(value, state.activeSpot);
+    renderInfo();
+    updateButtons();
+    detectChase();
+  }
+
+  function detectChase() {
+    if (state.lastOutcome === "loss" || state.lastOutcome === "bust") {
+      if (state.lastBet > 0 && state.bet > state.lastBet * 1.5 && !state._chasedThisRound) {
+        state.chaseCount++;
+        state._chasedThisRound = true;
+        logEvent("warn", `偵測到追損行為：上把輸 ${fmt(state.lastBet)}，這把下注 ${fmt(state.bet)}（×${(state.bet/state.lastBet).toFixed(1)}）`);
+        maybeRealityCheck("bet");
+        updateMonitor();
+      }
+    }
+  }
+
+  function clearBet() {
+    if (state.phase !== "betting") return;
+    state.bankroll += state.bet + state.luckyBet + state.busterBet;
+    state.bet = 0; state.luckyBet = 0; state.busterBet = 0;
+    state._chasedThisRound = false;
+    sweepBetChips("push", "main");
+    sweepBetChips("push", "ll");
+    sweepBetChips("push", "buster");
+    renderInfo();
+    updateButtons();
+  }
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function deal() {
+    if (state.bet <= 0) { toast("先下注吧"); return; }
+    setMessage("發牌中…");
+    state.hands = [makeHand(state.bet)];
+    state.dealer = [];
+    state.activeHandIdx = 0;
+    state.revealed = false;
+    state._chasedThisRound = false;
+    state.handMeta = {
+      bankrollBefore: state.bankroll + state.bet,
+      wagered: state.bet,
+      insurance: 0,
+      insuranceNet: 0,
+      initialPlayerCards: null,  // snapshotted post-deal for Lucky Lucky
+      sideBetLL: state.luckyBet,
+      sideBetBuster: state.busterBet,
+    };
+    setPhase("dealing");
+    renderHands();
+    const sideBits = [];
+    if (state.luckyBet > 0)  sideBits.push(`LL ${fmt(state.luckyBet)}`);
+    if (state.busterBet > 0) sideBits.push(`Buster ${fmt(state.busterBet)}`);
+    logEvent("info",
+      `第 ${state.lifetime.handsTotal + 1} 手開始 · 主注 ${fmt(state.bet)}` +
+      (sideBits.length ? ` · ${sideBits.join(" · ")}` : "") +
+      ` · 籌碼 ${fmt(state.bankroll)}`);
+
+    await sleep(380);
+    state.hands[0].cards.push(draw()); renderHands(); await sleep(520);
+    state.dealer.push(draw());         renderHands(); await sleep(520);
+    state.hands[0].cards.push(draw()); renderHands(); await sleep(520);
+
+    // Snapshot first 3 visible cards + settle Lucky Lucky NOW (before dealer hole card)
+    state.handMeta.initialPlayerCards = state.hands[0].cards.slice();
+    if (state.luckyBet > 0) {
+      await settleLuckyLuckyEarly();
+    }
+
+    state.dealer.push(draw());         renderHands(); await sleep(520);
+
+    if (state.dealer[0].rank === "A" && state.bankroll >= Math.floor(state.bet / 2)) {
+      setPhase("insurance");
+      insuranceEl.classList.remove("hidden");
+      setMessage("莊家明牌 A — 保險？");
+      logEvent("warn", "提供保險 — 統計上長期是賠錢的選項。");
+      return;
+    }
+    proceedAfterInsurance(false);
+  }
+
+  function proceedAfterInsurance(boughtIns) {
+    insuranceEl.classList.add("hidden");
+
+    if (boughtIns) {
+      const cost = Math.floor(state.bet / 2);
+      state.bankroll -= cost;
+      state.handMeta.insurance = cost;
+      state.handMeta.wagered += cost;
+      renderInfo();
+      logEvent("note", `買保險 ${fmt(cost)}`);
+    }
+
+    const dealerBJ = isBlackjack(state.dealer);
+
+    // settle insurance immediately
+    if (boughtIns) {
+      if (dealerBJ) {
+        const cost = state.handMeta.insurance;
+        state.bankroll += cost * 3; // cost back + 2*cost winnings
+        state.handMeta.insuranceNet = cost * 2;
+        popWin(cost * 2, betSpotEl, "medium");
+      } else {
+        state.handMeta.insuranceNet = -state.handMeta.insurance;
+      }
+    }
+
+    const firstHand = state.hands[0];
+    const playerBJ = isBlackjack(firstHand.cards);
+
+    if (dealerBJ || playerBJ) {
+      state.revealed = true;
+      renderHands();
+      if (dealerBJ && playerBJ) {
+        state.bankroll += firstHand.bet;
+        firstHand.finished = true;
+        setMessage(boughtIns ? "雙方 21 點 — 平手，保險命中" : "雙方 21 點 — 平手", "push");
+        finishGame([{ outcome: "push", hand: firstHand }]);
+      } else if (dealerBJ) {
+        firstHand.finished = true;
+        const insSaved = boughtIns && state.handMeta.insuranceNet >= 0;
+        setMessage(insSaved ? "莊家 Blackjack — 保險救了你" : "莊家 Blackjack — 你輸了", insSaved ? "push" : "lose");
+        finishGame([{ outcome: "loss", hand: firstHand }]);
+      } else {
+        const win = Math.floor(firstHand.bet * 1.5);
+        state.bankroll += firstHand.bet + win;
+        firstHand.finished = true;
+        setMessage("BLACKJACK! 賠率 3:2", "win");
+        popWin(win, getHandEl(0), "huge");
+        finishGame([{ outcome: "blackjack", hand: firstHand }]);
+      }
+      return;
+    }
+
+    setPhase("playerTurn");
+    renderHands();
+    updatePlayerMessage();
+  }
+
+  function confirmInsurance(yes) {
+    if (state.phase !== "insurance") return;
+    proceedAfterInsurance(yes);
+  }
+
+  function updatePlayerMessage() {
+    if (state.hands.length > 1) {
+      setMessage(`第 ${state.activeHandIdx + 1} / ${state.hands.length} 手`);
+    } else {
+      setMessage("HIT / STAND / DOUBLE / SPLIT / SURRENDER");
+    }
+  }
+
+  async function hit() {
+    if (state.phase !== "playerTurn") return;
+    const hand = activeHand();
+    if (!hand || hand.finished || hand.fromSplitAce) return;
+    hand.cards.push(draw());
+    renderHands();
+    const v = handValue(hand.cards).total;
+    if (v > 21) {
+      hand.finished = true;
+      await sleep(750);
+      await advanceToNextHandOrSettle();
+    } else if (v === 21) {
+      hand.finished = true;
+      await sleep(450);
+      await advanceToNextHandOrSettle();
+    } else {
+      updateButtons();
+    }
+  }
+
+  async function stand() {
+    if (state.phase !== "playerTurn") return;
+    const hand = activeHand();
+    if (!hand || hand.finished) return;
+    hand.finished = true;
+    await advanceToNextHandOrSettle();
+  }
+
+  async function doubleDown() {
+    if (state.phase !== "playerTurn") return;
+    const hand = activeHand();
+    if (!hand || hand.finished) return;
+    if (hand.cards.length !== 2) { toast("只能在兩張牌時加倍"); return; }
+    if (state.bankroll < hand.bet) { toast("籌碼不夠加倍"); return; }
+
+    state.bankroll -= hand.bet;
+    state.handMeta.wagered += hand.bet;
+    hand.doubled = true;
+    const denoms = state.placedChips.map(c => c.value);
+    denoms.forEach(v => addChipToSpot(v));
+    hand.bet *= 2;
+    renderInfo();
+    logEvent("note", `加倍下注 → ${fmt(hand.bet)}`);
+    hand.cards.push(draw());
+    renderHands();
+    await sleep(700);
+    hand.finished = true;
+    await advanceToNextHandOrSettle();
+  }
+
+  async function splitHand() {
+    if (state.phase !== "playerTurn") return;
+    const hand = activeHand();
+    if (!hand || !isHandSplittable(hand)) { toast("這手不能 SPLIT"); return; }
+    if (state.hands.length >= 2) { toast("只能 SPLIT 一次"); return; }
+    if (state.bankroll < hand.bet) { toast("籌碼不夠 SPLIT"); return; }
+
+    state.bankroll -= hand.bet;
+    state.handMeta.wagered += hand.bet;
+    const denoms = state.placedChips.map(c => c.value);
+    denoms.forEach(v => addChipToSpot(v));
+
+    const isAces = hand.cards[0].rank === "A";
+    const secondCard = hand.cards.pop();
+    const newHand = makeHand(hand.bet);
+    newHand.cards.push(secondCard);
+    hand.fromSplit = true; newHand.fromSplit = true;
+    if (isAces) { hand.fromSplitAce = true; newHand.fromSplitAce = true; }
+
+    state.hands.splice(state.activeHandIdx + 1, 0, newHand);
+    renderHands();
+    renderInfo();
+    logEvent("note", `SPLIT · 兩手各 ${fmt(hand.bet)}${isAces ? "（A 拆牌：每手只發一張）" : ""}`);
+    await sleep(500);
+
+    hand.cards.push(draw());
+    renderHands();
+    await sleep(500);
+    newHand.cards.push(draw());
+    renderHands();
+    await sleep(500);
+
+    if (isAces) {
+      hand.finished = true; newHand.finished = true;
+      await advanceToNextHandOrSettle();
+      return;
+    }
+    renderInfo();
+    updateButtons();
+    updatePlayerMessage();
+  }
+
+  async function surrender() {
+    if (state.phase !== "playerTurn") return;
+    const hand = activeHand();
+    if (!hand) return;
+    if (hand.cards.length !== 2) { toast("只能在兩張牌時投降"); return; }
+    if (state.hands.length > 1) { toast("拆牌後不能投降"); return; }
+    const refund = Math.ceil(hand.bet / 2);
+    state.bankroll += refund;
+    hand.surrendered = true;
+    hand.finished = true;
+    logEvent("warn", `SURRENDER · 拿回 ${fmt(refund)}（損失 ${fmt(hand.bet - refund)}）`);
+    renderInfo();
+    await advanceToNextHandOrSettle();
+  }
+
+  async function advanceToNextHandOrSettle() {
+    for (let i = state.activeHandIdx + 1; i < state.hands.length; i++) {
+      if (!state.hands[i].finished) {
+        state.activeHandIdx = i;
+        renderHands();
+        renderInfo();
+        if (handValue(state.hands[i].cards).total === 21) {
+          state.hands[i].finished = true;
+          await sleep(400);
+          await advanceToNextHandOrSettle();
+          return;
+        }
+        updateButtons();
+        updatePlayerMessage();
+        return;
+      }
+    }
+    await dealerPlayAndSettle();
+  }
+
+  async function dealerPlayAndSettle() {
+    state.revealed = true;
+    setPhase("settle");
+    renderHands();
+    await sleep(700);  // beat after the hole card flips
+
+    const anyAlive = state.hands.some(h => !h.surrendered && handValue(h.cards).total <= 21);
+    // Dealer must also play if Buster bet is live — Buster needs the bust count
+    const dealerMustPlay = anyAlive || state.busterBet > 0;
+    if (dealerMustPlay) {
+      // H17: dealer hits on soft 17
+      while (true) {
+        const { total, soft } = handValue(state.dealer);
+        if (total > 17) break;
+        if (total === 17 && !soft) break;
+        state.dealer.push(draw());
+        renderHands();
+        await sleep(750);
+      }
+    }
+
+    const dT = handValue(state.dealer).total;
+    const dBust = dT > 21;
+    const results = [];
+    const winsToPop = [];
+
+    state.hands.forEach((hand, idx) => {
+      const t = handValue(hand.cards).total;
+      if (hand.surrendered) { results.push({ outcome: "surrender", hand }); return; }
+      if (t > 21)            { results.push({ outcome: "bust", hand }); return; }
+      if (dBust || t > dT) {
+        state.bankroll += hand.bet * 2;
+        winsToPop.push({ amount: hand.bet, idx });
+        results.push({ outcome: "win", hand });
+      } else if (t < dT) {
+        results.push({ outcome: "loss", hand });
+      } else {
+        state.bankroll += hand.bet;
+        results.push({ outcome: "push", hand });
+      }
+    });
+    winsToPop.forEach((w, i) => {
+      setTimeout(() => popWin(w.amount, getHandEl(w.idx), "big"), i * 180);
+    });
+
+    const msg = composeSettleMessage(results, dT);
+    setMessage(msg.text, msg.kind);
+    finishGame(results);
+  }
+
+  function composeSettleMessage(results, dT) {
+    if (results.length === 1) {
+      const r = results[0];
+      const t = handValue(r.hand.cards).total;
+      if (r.outcome === "win")  return { text: dT > 21 ? `莊家爆牌 — 你 ${t} 贏了` : `你 ${t} 對莊家 ${dT} — 你贏了`, kind: "win" };
+      if (r.outcome === "bust") return { text: "BUST — 爆牌", kind: "lose" };
+      if (r.outcome === "loss") return { text: `莊家 ${dT} 對你 ${t} — 你輸了`, kind: "lose" };
+      if (r.outcome === "push") return { text: `平手 ${t}`, kind: "push" };
+      if (r.outcome === "surrender") return { text: "投降 — 損失半注", kind: "lose" };
+    }
+    let w = 0, l = 0, p = 0;
+    for (const r of results) {
+      if (r.outcome === "win") w++;
+      else if (["loss","bust","surrender"].includes(r.outcome)) l++;
+      else p++;
+    }
+    const parts = [];
+    if (w) parts.push(`${w} 勝`);
+    if (l) parts.push(`${l} 敗`);
+    if (p) parts.push(`${p} 和`);
+    return { text: `分牌結算 · ${parts.join(" / ")}`, kind: w > l ? "win" : l > w ? "lose" : "push" };
+  }
+
+  // ===== Side bet evaluation =====
+  async function settleLuckyLuckyEarly() {
+    await sleep(380);  // pause so the player sees the 3rd card before payout
+    const ll = evaluateLuckyLucky();
+    const wagered = state.luckyBet;
+    let net, kind;
+    if (ll.hit) {
+      const winnings = wagered * ll.ratio;
+      state.bankroll += wagered + winnings;
+      net = winnings;
+      kind = "win";
+      logEvent("win", `Lucky Lucky · ${ll.label} · +${fmt(winnings)} (${ll.ratio}:1)`);
+      toast(`Lucky Lucky · ${ll.label} +${fmt(winnings)}`);
+      const popSize = ll.ratio >= 100 ? "huge" : ll.ratio >= 20 ? "big" : ll.ratio >= 5 ? "medium" : "small";
+      popWin(winnings, llSpotEl, popSize);
+    } else {
+      net = -wagered;
+      kind = "loss";
+      logEvent("loss", `Lucky Lucky 沒中 · -${fmt(wagered)}`);
+    }
+    state.lifetime.wagered += wagered;
+    state.lifetime.pnl     += net;
+    state.sessionWagered   += wagered;
+    state.sessionPnL       += net;
+    saveLifetime();
+    state.luckyBet = 0;
+    renderInfo();
+
+    const llChips = state.placedChipsLL;
+    state.placedChipsLL = [];
+    scheduleSpotSweep(llChips, llSpotEl, kind, "ll", 80);
+    await sleep(420);  // brief beat to let the result register before continuing
+  }
+
+  function evaluateLuckyLucky() {
+    const init = state.handMeta?.initialPlayerCards;
+    if (!init || init.length < 2 || !state.dealer[0]) return { hit: false };
+    const cards = [init[0], init[1], state.dealer[0]];
+    const ranks = cards.map(c => c.rank);
+    const suits = cards.map(c => c.suit);
+    const allSuit = suits[0] === suits[1] && suits[1] === suits[2];
+    const isAll7  = ranks.every(r => r === "7");
+    const is678   = ranks.includes("6") && ranks.includes("7") && ranks.includes("8");
+
+    // Aces can count as 1 or 11 — collect every reachable total
+    let baseTotal = 0, aces = 0;
+    for (const c of cards) {
+      if (c.rank === "A") { baseTotal += 11; aces++; }
+      else if (["J","Q","K"].includes(c.rank)) baseTotal += 10;
+      else baseTotal += parseInt(c.rank, 10);
+    }
+    const totals = new Set([baseTotal]);
+    let t = baseTotal;
+    for (let i = 0; i < aces; i++) { t -= 10; totals.add(t); }
+    const has = (n) => totals.has(n);
+
+    if (isAll7 && allSuit) return { hit: true, label: "同花 7-7-7",  ratio: 200 };
+    if (is678  && allSuit) return { hit: true, label: "同花 6-7-8",  ratio: 100 };
+    if (isAll7)            return { hit: true, label: "雜色 7-7-7",  ratio: 50  };
+    if (has(21) && allSuit) return { hit: true, label: "同花 21", ratio: 20 };
+    if (is678)             return { hit: true, label: "雜色 6-7-8",  ratio: 10  };
+    if (has(21))           return { hit: true, label: "總和 21",     ratio: 3   };
+    if (has(20))           return { hit: true, label: "總和 20",     ratio: 2   };
+    if (has(19))           return { hit: true, label: "總和 19",     ratio: 2   };
+    return { hit: false };
+  }
+
+  function evaluateBuster() {
+    const dT = handValue(state.dealer).total;
+    if (dT <= 21) return { hit: false };
+    const n = state.dealer.length;
+    if (n === 3) return { hit: true, ratio: 2,   label: "莊家爆牌 3 張" };
+    if (n === 4) return { hit: true, ratio: 4,   label: "莊家爆牌 4 張" };
+    if (n === 5) return { hit: true, ratio: 18,  label: "莊家爆牌 5 張" };
+    if (n === 6) return { hit: true, ratio: 50,  label: "莊家爆牌 6 張" };
+    if (n === 7) return { hit: true, ratio: 250, label: "莊家爆牌 7 張" };
+    return         { hit: true, ratio: 800, label: `莊家爆牌 ${n} 張` };
+  }
+
+  function computeHandNet(r) {
+    const bet = r.hand.bet;
+    switch (r.outcome) {
+      case "win":       return bet;
+      case "blackjack": return Math.floor(bet * 1.5);
+      case "push":      return 0;
+      case "surrender": return -(bet - Math.ceil(bet / 2));
+      case "loss":
+      case "bust":      return -bet;
+    }
+    return 0;
+  }
+
+  function pickSweepKind(results) {
+    let w = 0, l = 0;
+    for (const r of results) {
+      if (r.outcome === "win" || r.outcome === "blackjack") w++;
+      else if (["loss","bust","surrender"].includes(r.outcome)) l++;
+    }
+    if (w > l) return "win";
+    if (l > w) return "loss";
+    return "push";
+  }
+
+  function finishGame(results) {
+    for (const r of results) {
+      let recOut = r.outcome;
+      if (recOut === "surrender" || recOut === "bust") recOut = "loss";
+      recordHandResult(recOut, r.hand.bet, computeHandNet(r));
+    }
+
+    // Insurance side-bet
+    if (state.handMeta && state.handMeta.insurance > 0) {
+      state.lifetime.wagered += state.handMeta.insurance;
+      state.lifetime.pnl     += state.handMeta.insuranceNet;
+      state.sessionWagered   += state.handMeta.insurance;
+      state.sessionPnL       += state.handMeta.insuranceNet;
+      const sign = state.handMeta.insuranceNet >= 0 ? "+" : "";
+      logEvent("note", `保險結算 · ${sign}${fmt(state.handMeta.insuranceNet)}`);
+    }
+
+    // (Lucky Lucky was settled right after the 3rd card was dealt — see settleLuckyLuckyEarly)
+
+    // Buster Blackjack
+    let busterKind = "push";
+    if (state.busterBet > 0) {
+      const b = evaluateBuster();
+      const wagered = state.busterBet;
+      let net;
+      if (b.hit) {
+        const winnings = wagered * b.ratio;
+        state.bankroll += wagered + winnings;
+        net = winnings;
+        busterKind = "win";
+        logEvent("win", `Buster · ${b.label} · +${fmt(winnings)} (${b.ratio}:1)`);
+        const popSize = b.ratio >= 100 ? "huge" : b.ratio >= 20 ? "big" : b.ratio >= 5 ? "medium" : "small";
+        popWin(winnings, busterSpotEl, popSize);
+      } else {
+        net = -wagered;
+        busterKind = "loss";
+        logEvent("loss", `Buster 沒中（莊家沒爆）· -${fmt(wagered)}`);
+      }
+      state.lifetime.wagered += wagered;
+      state.lifetime.pnl     += net;
+      state.sessionWagered   += wagered;
+      state.sessionPnL       += net;
+    }
+
+    saveLifetime();
+
+    const hadBuster = state.busterBet > 0;
+    state.bet = 0; state.busterBet = 0;
+    renderInfo();
+    setPhase("betting");
+
+    // Sweep main + Buster (LL was already swept earlier in settleLuckyLuckyEarly)
+    const sweepMainKind = pickSweepKind(results);
+    scheduleSpotSweep(state.placedChips, betSpotEl, sweepMainKind, "main");
+    state.placedChips = [];
+    if (hadBuster) {
+      scheduleSpotSweep(state.placedChipsBuster, busterSpotEl, busterKind, "buster");
+      state.placedChipsBuster = [];
+    }
+
+    if (state.bankroll <= 0) setTimeout(showBankruptBanner, 500);
+  }
+
+  function scheduleSpotSweep(chipsSnapshot, spotElement, kind, spotName, delay = 1300) {
+    setTimeout(() => {
+      chipsSnapshot.forEach((c, i) => {
+        setTimeout(() => {
+          c.el.classList.add("sweep-" + kind);
+          setTimeout(() => c.el.remove(), 650);
+        }, i * 30);
+      });
+      setTimeout(() => {
+        if (chipsArrFor(spotName).length === 0) spotElement.classList.remove("has-chips");
+      }, chipsSnapshot.length * 30 + 700);
+    }, delay);
+  }
+
+  function showBankruptBanner() {
+    const lt = state.lifetime;
+    $("bankrupt-detail").innerHTML =
+      `Session: ${state.sessionHands} 手 · ${fmt(-state.sessionPnL)} 燒掉 · 持續 ${fmtTime(Date.now() - state.sessionStart)}<br>` +
+      `Lifetime: 莊家累計從你身上賺走 <b style="color:#ff6b6b">${fmt(Math.max(0,-lt.pnl))}</b>`;
+    $("bankrupt-banner").classList.remove("hidden");
+    logEvent("alert", "玩家籌碼歸零。");
+  }
+
+  function rebuy() {
+    state.bankroll = 1000;
+    state.lifetime.rebuys++;
+    saveLifetime();
+    $("bankrupt-banner").classList.add("hidden");
+    logEvent("alert", `重新發放 $1,000 籌碼（第 ${state.lifetime.rebuys} 次）`);
+    maybeRealityCheck("rebuy");
+    updateMonitor();
+    renderInfo();
+    updateButtons();
+  }
+
+  function resetLifetime() {
+    if (!confirm("確定要清除所有累積戰績？這會讓你的歷史虧損消失（但實際上沒有消失，因為都是假錢）。")) return;
+    state.lifetime = defaultLifetime();
+    saveLifetime();
+    logEvent("alert", "Lifetime 戰績已清除。");
+    updateMonitor();
+  }
+
+  // ===== Events =====
+  document.querySelectorAll(".chip").forEach((el) => {
+    el.addEventListener("click", () => placeChip(+el.dataset.value));
+  });
+  betSpotEl.addEventListener("click", () => setActiveSpot("main"));
+  llSpotEl.addEventListener("click", () => setActiveSpot("ll"));
+  busterSpotEl.addEventListener("click", () => setActiveSpot("buster"));
+  clearBetBtn.addEventListener("click", clearBet);
+  dealBtn.addEventListener("click", () => {
+    if (state.phase === "betting") {
+      state.hands = []; state.dealer = [];
+      renderHands();
+      deal();
+    }
+  });
+  hitBtn.addEventListener("click", () => { logEvent("note", "HIT"); hit(); });
+  standBtn.addEventListener("click", () => { logEvent("note", "STAND"); stand(); });
+  doubleBtn.addEventListener("click", () => { logEvent("note", "DOUBLE DOWN"); doubleDown(); });
+  splitBtn.addEventListener("click", () => { logEvent("note", "SPLIT"); splitHand(); });
+  surrenderBtn.addEventListener("click", () => surrender());
+  insuranceEl.addEventListener("click", (e) => {
+    const t = e.target;
+    if (t.dataset.ins === "yes") { logEvent("note", "買保險"); confirmInsurance(true); }
+    else if (t.dataset.ins === "no") { logEvent("note", "不買保險"); confirmInsurance(false); }
+  });
+
+  monitorToggle.addEventListener("click", () => monitorEl.classList.toggle("open"));
+  monitorClose.addEventListener("click", () => monitorEl.classList.remove("open"));
+  $("reset-lifetime").addEventListener("click", resetLifetime);
+  $("rebuy-yes").addEventListener("click", rebuy);
+  $("rebuy-no").addEventListener("click", () => {
+    logEvent("info", "玩家選擇離開。這是整晚最聰明的決定。");
+    $("bankrupt-detail").innerHTML += `<br><br><span style="color:#7fffd4">這是整晚最聰明的決定。</span>`;
+    document.getElementById("rebuy-no").disabled = true;
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.target.matches("button, input")) return;
+    if (e.key === "h" || e.key === "H") hit();
+    else if (e.key === "s" || e.key === "S") stand();
+    else if (e.key === "d" || e.key === "D") doubleDown();
+    else if (e.key === "p" || e.key === "P") splitHand();
+    else if (e.key === "r" || e.key === "R") surrender();
+    else if (e.key === "Enter") { if (!dealBtn.disabled) dealBtn.click(); }
+    else if (e.key === "m" || e.key === "M") monitorEl.classList.toggle("open");
+  });
+
+  // ===== Init =====
+  state.deck = buildShoe();
+  setActiveSpot("main");
+  renderInfo();
+  renderHands();
+  updateButtons();
+  logEvent("info", "Velvet 21 已啟動。監控台正在記錄你的每一個動作。");
+  if (state.lifetime.handsTotal > 0) {
+    logEvent("note", `歡迎回來 — 你已經玩了 ${state.lifetime.handsTotal} 手，目前累積 ${state.lifetime.pnl >= 0 ? "獲利" : "虧損"} ${fmt(Math.abs(state.lifetime.pnl))}`);
+  }
+  updateMonitor();
+  maybeRealityCheck("init");
+
+  // tick every second for session time / reality check
+  setInterval(() => {
+    updateMonitor();
+    if (Math.random() < 0.04) maybeRealityCheck("ambient");
+  }, 1000);
+})();
+</script>
+</body>
+</html>
